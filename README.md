@@ -65,9 +65,24 @@ could in principle land in Whispering proper as PRs — see
 
 ## Install
 
-Pre-built binaries are not yet published. Build from source — see below.
+Two paths, pick whichever you trust:
 
-## Build from source
+### Option A — Download a pre-built binary
+
+1. Grab `dictation-shim.exe` from the latest [Release](../../releases/latest).
+2. Verify the SHA256 against `dictation-shim.exe.sha256` from the same
+   release if you want to be thorough:
+   ```powershell
+   Get-FileHash dictation-shim.exe -Algorithm SHA256
+   ```
+3. **First-run SmartScreen warning is expected.** The binary isn't
+   code-signed (a cert costs ~€200/year and this is a hobby project).
+   Click *More info → Run anyway*. The exe is built reproducibly via
+   GitHub Actions from the tagged commit; the workflow file is in
+   [`.github/workflows/release.yml`](.github/workflows/release.yml) so
+   you can audit it.
+
+### Option B — Build from source
 
 Requires .NET 9 SDK (or newer) on Windows.
 
@@ -78,6 +93,7 @@ dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
 
 Output: `bin\Release\net9.0-windows\win-x64\publish\dictation-shim.exe`.
+No SmartScreen warning when you build it yourself.
 
 ## Run
 
