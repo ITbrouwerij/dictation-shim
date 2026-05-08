@@ -1,0 +1,23 @@
+# Build artefacts
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+
+# IDE / editor
+.vs/
+.idea/
+.vscode/
+
+# .NET
+*.pdb
+*.dll
+*.exe
+*.csproj.user
+project.lock.json
+project.fragment.lock.json
+
+# Misc
+.DS_Store
+Thumbs.db
