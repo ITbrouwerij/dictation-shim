@@ -1,32 +1,42 @@
 # dictation-shim
 
-A tiny Windows tray app that adds Wispr Flow-style **`Ctrl+Win` push-to-talk**
-to [Whispering](https://github.com/EpicenterHQ/epicenter) — plus a few extras
-that make local dictation feel as polished as commercial offerings.
+> Wispr-Flow-style **`Ctrl+Win` push-to-talk** for
+> [Whispering](https://github.com/EpicenterHQ/epicenter) on Windows, plus
+> full-format clipboard preserve and audio auto-mute.
 
-> **What it solves**: Whispering is great, but on Windows it can't bind a
-> bare modifier-only chord like `Ctrl+Win` as its global shortcut (Tauri's
-> `RegisterHotKey` doesn't allow it), and ex-Wispr-Flow users miss that
-> exact muscle memory. Whispering also clobbers your clipboard with the
-> transcribed text and doesn't mute background audio while you record.
-> This shim layers all three fixes on top, without touching Whispering itself.
+This is a **companion app** for Whispering, not a standalone dictation
+tool. It doesn't record, transcribe, or paste anything itself — Whispering
+does all of that. The shim only catches a chord that Whispering can't
+register on its own (`Ctrl+Win`, a bare modifier-only combo) and forwards
+it as a normal hotkey, plus a few polish features around the edges.
 
 ```
-toetsenbord ──Ctrl+Win held──▶ dictation-shim.exe (LL hook + keybd_event)
-                                 │
-                                 └──Ctrl+Shift+Alt+Space held──▶ Whispering (Tauri, push-to-talk)
-                                                                   │
-                                                                   ▼
-                                                              transcribed text at cursor
+keyboard ──Ctrl+Win held──▶ dictation-shim (LL hook + keybd_event)
+                              │
+                              └──Ctrl+Shift+Alt+Space held──▶ Whispering (Tauri, push-to-talk)
+                                                                │
+                                                                ▼
+                                                          transcribed text at cursor
 ```
+
+---
+
+## Requirements
+
+- **Windows 10 2004+ or Windows 11** (developed/tested on Win11 26200).
+- **[Whispering](https://github.com/EpicenterHQ/epicenter/releases)
+  installed and configured** with a working transcription backend
+  ([Speaches](https://github.com/speaches-ai/speaches) for local, or
+  Groq/OpenAI for cloud — Whispering's docs cover both).
+- *(only when building from source)* .NET 9 SDK or newer.
 
 ## Features
 
 - **Ctrl+Win push-to-talk** — hold the chord, dictate, release. Works in any
-  press order, both left and right modifier sides.
-- **Robust Win-key handling** — `Win+E`, `Win+R` and friends still work
-  normally. The Start menu doesn't pop up by accident even when the chord
-  starts with `Win` first. ~30 ms resolve window keeps things deterministic.
+  press order, both left- and right-side modifiers.
+- **Robust Win-key handling** — `Win+E`, `Win+R`, etc. still work normally.
+  Start menu doesn't pop up by accident, even when the chord starts with
+  `Win` first. ~30 ms resolve window keeps things deterministic.
 - **Full-format clipboard preserve** — Whispering's built-in restore only
   saves plain text. The shim snapshots the **entire** clipboard
   (rich text, HTML, images, file lists, custom app formats) at chord-start
@@ -38,30 +48,31 @@ toetsenbord ──Ctrl+Win held──▶ dictation-shim.exe (LL hook + keybd_eve
   If you had already muted manually, the shim leaves it alone.
 - **Tray menu**: *Reset stuck keys* (defensive cleanup), *Restart*, *Quit*.
 - **Single small `.exe`** (~48 MB self-contained, no .NET runtime install
-  needed). No background service.
+  needed). No Windows service, no admin rights.
 
 ## Why a separate shim, not a Whispering fork?
 
 The bare-modifier chord problem is fundamental: Win32's `RegisterHotKey`
-(used by Tauri's global-shortcut plugin) refuses chord-only shortcuts. The
-only ways around it are a kernel driver or a low-level keyboard hook in a
-separate process — which is exactly what this shim is. Forking Whispering
-to add an LL hook would be ~10× the maintenance for the same result.
+(used by Tauri's global-shortcut plugin, which Whispering relies on) refuses
+shortcuts without a non-modifier key. The only ways around it are a kernel
+driver or a low-level keyboard hook in a separate process — which is
+exactly what this shim is. Forking Whispering to add an LL hook would be
+~10× the maintenance for the same result.
 
 Two of the shim's other features (clipboard-all-formats, audio auto-mute)
 could in principle land in Whispering proper as PRs — see
-[Contributing](#contributing) below.
+[Contributing](#contributing).
 
-## Install (pre-built)
+## Install
 
-> Pre-built binaries are not yet published. For now, build from source — see below.
+Pre-built binaries are not yet published. Build from source — see below.
 
 ## Build from source
 
 Requires .NET 9 SDK (or newer) on Windows.
 
 ```powershell
-git clone https://github.com/<org>/dictation-shim.git
+git clone <this-repo-url>
 cd dictation-shim
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
 ```
@@ -91,20 +102,22 @@ $lnk.Save()
 
 ## Whispering setup
 
-Required Whispering settings (Settings → Recording):
+Inside Whispering, under Settings → Recording:
 - **Hotkey**: `Ctrl+Shift+Alt+Space`
 - **Mode**: Push-to-Talk
 - *(optional)* turn off the post-transcription sound — it's redundant once
   you've trained your ear on the start-recording beep.
 
 The shim catches `Ctrl+Win` and emits `Ctrl+Shift+Alt+Space` only as long
-as the chord is held; Whispering does the rest.
+as the chord is held; Whispering does the rest. Whispering must be running
+(window can be hidden via *tray → Hide Window*) — the shim only forwards
+keystrokes, it doesn't launch or restart Whispering.
 
 ## Configuration
 
-Source/target hotkeys and timing constants are defined as `const` values
-near the top of `Program.cs`. To customize, edit and rebuild. A
-runtime config file may land in a future release.
+Source/target hotkeys and timing constants live as `const` values near the
+top of `Program.cs`. To customize, edit and rebuild. A runtime config
+file may land in a future release.
 
 ## Logs
 
@@ -115,28 +128,34 @@ intentionally disabled to keep the file tiny.
 ## Troubleshooting
 
 - **Hotkey does nothing** — check `Get-Process dictation-shim`; check the
-  log shows `hook installed`; verify Whispering still has Ctrl+Shift+Alt+Space
-  registered (test by pressing the four keys directly).
+  log shows `hook installed`; verify Whispering is running with
+  `Ctrl+Shift+Alt+Space` registered (test by pressing the four keys
+  directly — Whispering should toggle).
 - **Ctrl+Win opens Copilot or a download page** — shim isn't running.
   Restart it.
 - **A modifier got stuck** (rare) — tray menu → *Reset stuck keys*.
-- **Audio stays muted** — *Reset stuck keys* also resets the mute state via
-  *Restart*; or unmute manually with the speaker icon on the taskbar.
-
-## Compatibility
-
-Tested on **Windows 11 26200** with Whispering v7.11.0 and a
-GTX 1660 Ti. Should work on Windows 10 2004+ but not actively tested.
+- **Audio stays muted** — *Reset stuck keys* doesn't restore audio; use
+  *Restart* (it disposes hooks cleanly) or unmute manually with the
+  speaker icon on the taskbar.
 
 ## Background: why `keybd_event`, not `SendInput`?
 
-On the test system, Whispering's RegisterHotKey-registered global shortcut
-fires for `keybd_event`-injected synthetic events but **not** for `SendInput`
-ones. Both APIs go through the same Win32 input pipeline in theory. In
-practice — for whatever Win11-internal reason — they behave differently
-here. PowerToys Keyboard Manager (which uses `SendInput`) cannot trigger
-Whispering on this system; this shim (which uses `keybd_event`) can.
-The asymmetry is documented in the source where it matters.
+On the developer's Win11 system, Whispering's RegisterHotKey-registered
+global shortcut fires for `keybd_event`-injected synthetic events but
+**not** for `SendInput` ones. Both APIs go through the same Win32 input
+pipeline in theory. In practice — for whatever Win11-internal reason —
+they behave differently here. PowerToys Keyboard Manager (which uses
+`SendInput`) cannot trigger Whispering on this system; this shim (which
+uses `keybd_event`) can. The asymmetry is documented in the source where
+it matters. Reports of behavior on other Windows builds welcome.
+
+## Origin
+
+Built to replace [Wispr Flow](https://wisprflow.ai/) with a fully-local
+stack (Whispering + Speaches + this shim) while keeping the exact
+muscle-memory of `Ctrl+Win` push-to-talk. Distilled from a personal setup
+into a reusable tool — your mileage and your Windows version may vary,
+but the architecture should generalize.
 
 ## Contributing
 
@@ -157,6 +176,8 @@ Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 ## Acknowledgements
 
 - [Whispering](https://github.com/EpicenterHQ/epicenter) by Braden Wong —
-  the actual transcription pipeline this shim hangs off of.
+  the actual transcription pipeline this shim hangs off of. Without it
+  there's nothing to forward to.
 - [Speaches](https://github.com/speaches-ai/speaches) — the local Whisper
-  inference server I run Whispering against.
+  inference server I run Whispering against. Not required by the shim —
+  any Whispering-supported backend works.
