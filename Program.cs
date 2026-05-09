@@ -451,7 +451,12 @@ internal static class Clip
     private static CancellationTokenSource? _restoreCts;
     private static readonly object _stateLock = new();
 
-    private const int RESTORE_TIMEOUT_MS = 30_000;
+    // Generous upper bound: long dictations + slow transcription backends
+    // can easily push past a minute. If Whispering never writes the clipboard
+    // within this window, we treat it as "transcription cancelled / failed"
+    // and skip the restore — the clipboard hasn't been clobbered, so there's
+    // nothing to restore.
+    private const int RESTORE_TIMEOUT_MS = 300_000; // 5 minutes
     private const int POLL_INTERVAL_MS = 100;
     // After Whispering's clipboard write is observed, give it time to paste
     // and run its own restore attempt before we overwrite with the original.
@@ -516,17 +521,29 @@ internal static class Clip
             try
             {
                 int waited = 0;
+                bool clipboardChanged = false;
                 // Phase 1: wait for the first clipboard change (Whispering writes text).
                 while (!cts.IsCancellationRequested && waited < RESTORE_TIMEOUT_MS)
                 {
                     await Task.Delay(POLL_INTERVAL_MS, cts.Token);
                     waited += POLL_INTERVAL_MS;
-                    if (GetClipboardSequenceNumber() != startSeq) break;
+                    if (GetClipboardSequenceNumber() != startSeq)
+                    {
+                        clipboardChanged = true;
+                        break;
+                    }
                 }
                 if (cts.IsCancellationRequested) return;
+                if (!clipboardChanged)
+                {
+                    // Timed out without Whispering writing anything (transcription
+                    // cancelled/failed, or backend stalled). Clipboard hasn't been
+                    // clobbered, so there is nothing to restore — skip and exit.
+                    return;
+                }
 
-                // Phase 2: Whispering's flow is write → sleep 50 → paste → sleep 100
-                // → restore-text. Wait long enough that its restore-attempt has run,
+                // Phase 2: Whispering's flow is write, sleep 50, paste, sleep 100,
+                // restore-text. Wait long enough that its restore-attempt has run,
                 // so our restore lands on top.
                 await Task.Delay(POST_CHANGE_DELAY_MS, cts.Token);
                 if (cts.IsCancellationRequested) return;
